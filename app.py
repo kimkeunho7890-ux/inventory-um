@@ -5,7 +5,17 @@ import os
 
 st.set_page_config(layout="wide")
 
-st.markdown("""<style>.stDataFrame {font-size: 0.8rem;}.stDataFrame th, .stDataFrame td {padding: 4px 5px;}.streamlit-expander .stDataFrame {font-size: 0.8rem;}.streamlit-expander .stDataFrame th, .streamlit-expander .stDataFrame td {padding: 4px 5px;}.stMarkdown {margin-bottom: -20px;}</style>""", unsafe_allow_html=True)
+# 모바일 화면 최적화를 위한 스타일 코드
+st.markdown("""
+<style>
+    .stDataFrame { font-size: 0.8rem; }
+    .stDataFrame th, .stDataFrame td { padding: 4px 5px; }
+    .streamlit-expander .stDataFrame { font-size: 0.8rem; }
+    .streamlit-expander .stDataFrame th, .streamlit-expander .stDataFrame td { padding: 4px 5px; }
+    .stMarkdown { margin-bottom: -20px; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title('📱 재고 현황 대시보드 (최종 완성본)')
 
 @st.cache_data(ttl=600)
@@ -41,26 +51,21 @@ selected_personnel = st.sidebar.multiselect('담당', available_personnel, defau
 df_filtered = df[df['영업그룹'].isin(selected_groups) & df['담당'].isin(selected_personnel)]
 
 st.header('📊 모델별 판매 요약 (상위 20개)')
-model_summary = df_filtered.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).sort_values(by='판매수량', ascending=False)
+model_summary = df_filtered.groupby('모델명', observed=True).agg(
+    재고수량=('재고수량', 'sum'),
+    판매수량=('판매수량', 'sum')
+).sort_values(by='판매수량', ascending=False)
 total_volume_summary = model_summary['재고수량'] + model_summary['판매수량']
 model_summary['재고회전율'] = np.divide(model_summary['판매수량'], total_volume_summary, out=np.zeros_like(total_volume_summary, dtype=float), where=total_volume_summary!=0).apply(lambda x: f"{x:.2%}")
 top_20_summary = model_summary.head(20)
 st.dataframe(top_20_summary.T.astype(str), use_container_width=True)
 
-st.write("📈 **요약 모델 바로 조회**")
-top_20_models = top_20_summary.index.tolist()
-if 'clicked_model' not in st.session_state: st.session_state.clicked_model = None
-cols = st.columns(5, gap="small")
-for i, model_name in enumerate(top_20_models):
-    if cols[i % 5].button(model_name, key=f"model_btn_{i}"):
-        st.session_state.clicked_model = model_name
-        st.rerun()
+# --- "요약 모델 바로 조회" 버튼 섹션 제거 ---
 
 st.header('🔎 상세 검색')
 show_color = st.checkbox("색상별 상세 보기")
-default_selection = [st.session_state.clicked_model] if st.session_state.clicked_model else []
 inventory_sorted_models = df.groupby('모델명', observed=True)['재고수량'].sum().sort_values(ascending=False).index.tolist()
-selected_models = st.multiselect("모델명을 선택하세요", inventory_sorted_models, default=default_selection)
+selected_models = st.multiselect("모델명을 선택하세요", inventory_sorted_models)
 
 if selected_models:
     detail_summary = df[df['모델명'].isin(selected_models)]
@@ -116,18 +121,24 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                     df_store = df_person.groupby('출고처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
                     df_store = df_store.sort_values(by='판매수량', ascending=False)
                     
-                    store_total = df_store['재고수량'] + df_store['판매수량']
-                    df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
-
-                    # Expander 대신 소제목과 데이터프레임으로 변경
-                    for idx, row in df_store.iterrows():
-                        st.markdown(f"**🏪 판매점: {row['출고처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})")
-                        df_model = df_person[df_person['출고처'] == row['출고처']]
+                    # 판매점 목록을 드롭다운으로 변경
+                    store_list = df_store['출고처'].tolist()
+                    store_list.insert(0, "판매점을 선택하세요")
+                    
+                    selected_store = st.selectbox(
+                        "판매점 상세 보기:",
+                        options=store_list,
+                        key=f"store_select_{group}_{person_name}" # 각 selectbox마다 고유 키 부여
+                    )
+                    
+                    # 판매점을 선택했을 경우에만 상세 내역 표시
+                    if selected_store != "판매점을 선택하세요":
+                        df_model = df_person[df_person['출고처'] == selected_store]
                         
                         model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
                         model_detail = model_detail.sort_values(by='판매수량', ascending=False)
                         
                         model_total = model_detail['재고수량'] + model_detail['판매수량']
                         model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
+                        
                         st.markdown(model_detail.to_html(index=False), unsafe_allow_html=True)
-                        st.markdown("---") # 구분선 추가
