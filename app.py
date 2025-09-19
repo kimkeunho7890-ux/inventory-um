@@ -57,7 +57,6 @@ model_summary['재고회전율'] = np.divide(model_summary['판매수량'], tota
 top_20_summary = model_summary.head(20)
 st.dataframe(top_20_summary.T.astype(str), use_container_width=True)
 
-
 st.header('🔎 상세 검색')
 show_color = st.checkbox("색상별 상세 보기")
 inventory_sorted_models = df.groupby('모델명', observed=True)['재고수량'].sum().sort_values(ascending=False).index.tolist()
@@ -93,7 +92,6 @@ if selected_models:
         sorted_detail_agg = detail_agg.sort_values(by=['영업그룹', '판매수량'], ascending=[True, False])
         st.markdown(sorted_detail_agg.to_html(index=False), unsafe_allow_html=True)
 
-# --- <<< 계층형 상세 보기 최종 수정 (모바일 최적화) >>> ---
 st.header('📄 계층형 상세 데이터 보기')
 
 for group in [g for g in group_options if g in df_filtered['영업그룹'].unique()]:
@@ -113,16 +111,16 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                 with tabs[i]:
                     df_person = df_group[df_group['담당'] == person_name]
                     
-                    df_store = df_person.groupby('출처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
+                    # --- <<< '출처'를 '출고처'로 모두 수정 >>> ---
+                    df_store = df_person.groupby('출고처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
                     df_store = df_store.sort_values(by='판매수량', ascending=False)
                     
                     store_total = df_store['재고수량'] + df_store['판매수량']
                     df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
 
-                    # 각 판매점을 expander로 표시
                     for idx, row in df_store.iterrows():
-                        with st.expander(f"🏪 **판매점: {row['출처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})"):
-                            df_model = df_person[df_person['출처'] == row['출처']]
+                        with st.expander(f"🏪 **판매점: {row['출고처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})"):
+                            df_model = df_person[df_person['출고처'] == row['출고처']]
                             
                             model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
                             model_detail = model_detail.sort_values(by='판매수량', ascending=False)
@@ -130,6 +128,5 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                             model_total = model_detail['재고수량'] + model_detail['판매수량']
                             model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
                             
-                            # 표 헤더를 짧게 바꾸고 순번을 제거하여 표시
                             model_detail.rename(columns={'모델명': '모델', '재고수량': '재고', '판매수량': '판매', '재고회전율': '회전율'}, inplace=True)
                             st.dataframe(model_detail, use_container_width=True, hide_index=True)
