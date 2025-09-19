@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: inventory-final-app # 렌더 서비스 이름과 일치시키세요
+    env: python
+    plan: free
+    # 미리보기 기능을 활성화합니다.
+    previews: true
+    pythonVersion: "3.11"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run app.py"
+    # 앱이 정상적으로 실행 중인지 확인하는 헬스 체크를 추가합니다.
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        fromService:
+          type: psql
+          name: inventory-db # 렌더에서 만든 데이터베이스 이름
+          property: internalConnectionString
+      - key: ADMIN_PASSWORD
+        sync: false
