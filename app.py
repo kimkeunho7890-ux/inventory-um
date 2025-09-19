@@ -5,7 +5,7 @@ import os
 
 st.set_page_config(layout="wide")
 
-# 모바일 화면 최적화를 위한 스타일 코드
+# --- <<< 모바일 화면 및 메트릭 스타일 최종 수정 >>> ---
 st.markdown("""
 <style>
     .stDataFrame { font-size: 0.8rem; }
@@ -13,15 +13,24 @@ st.markdown("""
     .stMarkdown { margin-bottom: 0px; }
     .stButton>button { padding: 0.25em 0.38em; font-size: 0.8rem; margin-top: 5px;}
     h1, h2, h3 { margin-bottom: 0.5rem; }
-    /* st.metric 스타일을 더 작고 깔끔하게 조정 */
+    
+    /* st.metric 스타일을 주황색 테마로 변경하고 더 작게 조정 */
     [data-testid="stMetric"] {
-        background-color: #F0F2F6;
-        border-radius: 5px;
-        padding: 5px 10px;
+        background-color: #FF7F0E; /* 주황색 배경 */
+        border: 1px solid #FF7F0E;
+        border-radius: 8px;        /* 모서리를 둥글게 */
+        padding: 5px 8px;          /* 내부 여백을 줄여 폭을 좁힘 */
+        color: white;              /* 기본 글씨색 */
     }
+    /* 메트릭 라벨(제목) 글씨색 */
     [data-testid="stMetricLabel"] {
         font-size: 0.8rem;
+        color: white;
         margin-bottom: -10px;
+    }
+    /* 메트릭 값(숫자) 글씨색 */
+    [data-testid="stMetricValue"] {
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -61,7 +70,10 @@ selected_personnel = st.sidebar.multiselect('담당', available_personnel, defau
 df_filtered = df[df['영업그룹'].isin(selected_groups) & df['담당'].isin(selected_personnel)]
 
 st.header('📊 모델별 판매 요약 (상위 20개)')
-model_summary = df_filtered.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).sort_values(by='판매수량', ascending=False)
+model_summary = df_filtered.groupby('모델명', observed=True).agg(
+    재고수량=('재고수량', 'sum'),
+    판매수량=('판매수량', 'sum')
+).sort_values(by='판매수량', ascending=False)
 total_volume_summary = model_summary['재고수량'] + model_summary['판매수량']
 model_summary['재고회전율'] = np.divide(model_summary['판매수량'], total_volume_summary, out=np.zeros_like(total_volume_summary, dtype=float), where=total_volume_summary!=0).apply(lambda x: f"{x:.2%}")
 top_20_summary = model_summary.head(20)
@@ -127,19 +139,16 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                     store_total = df_store['재고수량'] + df_store['판매수량']
                     df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
 
-                    # --- <<< 판매점별 요약을 카드 형태로 변경 (모바일 최적화) >>> ---
                     for idx, row in df_store.iterrows():
                         unique_key = f"{group}_{person_name}_{row['출고처']}"
                         
                         st.markdown(f"**🏪 {row['출고처']}**")
                         
-                        # st.metric을 사용하여 깔끔하게 표시
                         metric_cols = st.columns(3)
                         metric_cols[0].metric("재고", row['재고수량'])
                         metric_cols[1].metric("판매", row['판매수량'])
                         metric_cols[2].metric("회전율", row['재고회전율'])
 
-                        # '상세' 버튼 클릭 로직
                         if st.button("모델별 상세 보기", key=f"btn_{unique_key}"):
                             if st.session_state.expanded_store.get(person_name) == row['출고처']:
                                 st.session_state.expanded_store[person_name] = None
@@ -147,7 +156,6 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                                 st.session_state.expanded_store[person_name] = row['출고처']
                             st.rerun()
 
-                        # '상세' 버튼이 눌린 판매점의 상세 모델 현황 표시
                         if st.session_state.expanded_store.get(person_name) == row['출고처']:
                             with st.container():
                                 df_model = df_person[df_person['출고처'] == row['출고처']]
