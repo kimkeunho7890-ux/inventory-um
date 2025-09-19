@@ -106,7 +106,6 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
         person_summary = df_group.groupby('담당', observed=True)['판매수량'].sum().sort_values(ascending=False).reset_index()
         person_list = person_summary['담당'].tolist()
         
-        # 담당자 목록이 있을 경우에만 탭 생성
         if person_list:
             tabs = st.tabs(person_list)
             
@@ -120,13 +119,15 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                     store_total = df_store['재고수량'] + df_store['판매수량']
                     df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
 
+                    # Expander 대신 소제목과 데이터프레임으로 변경
                     for idx, row in df_store.iterrows():
-                        with st.expander(f"🏪 **판매점: {row['출고처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})"):
-                            df_model = df_person[df_person['출고처'] == row['출고처']]
-                            
-                            model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
-                            model_detail = model_detail.sort_values(by='판매수량', ascending=False)
-                            
-                            model_total = model_detail['재고수량'] + model_detail['판매수량']
-                            model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
-                            st.markdown(model_detail.to_html(index=False), unsafe_allow_html=True)
+                        st.markdown(f"**🏪 판매점: {row['출고처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})")
+                        df_model = df_person[df_person['출고처'] == row['출고처']]
+                        
+                        model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
+                        model_detail = model_detail.sort_values(by='판매수량', ascending=False)
+                        
+                        model_total = model_detail['재고수량'] + model_detail['판매수량']
+                        model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
+                        st.markdown(model_detail.to_html(index=False), unsafe_allow_html=True)
+                        st.markdown("---") # 구분선 추가
