@@ -94,6 +94,7 @@ if selected_models:
         sorted_detail_agg = detail_agg.sort_values(by=['영업그룹', '판매수량'], ascending=[True, False])
         st.markdown(sorted_detail_agg.to_html(index=False), unsafe_allow_html=True)
 
+# --- <<< 계층형 상세 보기 로직 전체 수정 (Expander 중첩 문제 해결) >>> ---
 st.header('📄 계층형 상세 데이터 보기')
 
 if 'expanded_store' not in st.session_state:
@@ -107,35 +108,59 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
     with st.expander(f"🏢 **영업그룹: {group}** (재고: {group_stock}, 판매: {group_sales}, 회전율: {group_turnover:.2%})"):
         
         person_summary = df_group.groupby('담당', observed=True)['판매수량'].sum().sort_values(ascending=False).reset_index()
+        person_list = person_summary['담당'].tolist()
         
-        for person_name in person_summary['담당']:
-            df_person = df_group[df_group['담당'] == person_name]
-            person_stock = df_person['재고수량'].sum(); person_sales = df_person['판매수량'].sum()
-            person_turnover = (person_sales / (person_stock + person_sales)) if (person_stock + person_sales) > 0 else 0
+        if person_list:
+            # 담당자 목록을 탭으로 생성
+            tabs = st.tabs(person_list)
             
-            with st.expander(f"👤 **담당: {person_name}** (재고: {person_stock}, 판매: {person_sales}, 회전율: {person_turnover:.2%})"):
-                
-                df_store = df_person.groupby('출고처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
-                df_store = df_store.sort_values(by='판매수량', ascending=False)
-                
-                store_total = df_store['재고수량'] + df_store['판매수량']
-                df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
+            for i, person_name in enumerate(person_list):
+                # 각 탭 안에 담당자별 내용 표시
+                with tabs[i]:
+                    df_person = df_group[df_group['담당'] == person_name]
+                    
+                    df_store = df_person.groupby('출고처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
+                    df_store = df_store.sort_values(by='판매수량', ascending=False)
+                    
+                    store_total = df_store['재고수량'] + df_store['판매수량']
+                    df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
 
-                for idx, row in df_store.iterrows():
-                    with st.expander(f"🏪 **판매점: {row['출고처']}** (재고: {row['재고수량']}, 판매: {row['판매수량']}, 회전율: {row['재고회전율']})"):
-                        df_model = df_person[df_person['출고처'] == row['출고처']]
+                    # 판매점별 요약 리스트 헤더
+                    header_cols = st.columns((1, 3, 1.5, 1.5, 1.5))
+                    header_cols[0].markdown('**상세**')
+                    header_cols[1].markdown('**판매점명**')
+                    header_cols[2].markdown('**재고수량**')
+                    header_cols[3].markdown('**판매수량**')
+                    header_cols[4].markdown('**재고회전율**')
+
+                    # 판매점별 요약 리스트 및 상세보기 버튼 생성
+                    for idx, row in df_store.iterrows():
+                        unique_key = f"{group}_{person_name}_{row['출고처']}"
                         
-                        model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
-                        model_detail = model_detail.sort_values(by='판매수량', ascending=False)
+                        row_cols = st.columns((1, 3, 1.5, 1.5, 1.5))
+
+                        if row_cols[0].button("상세", key=f"btn_{unique_key}"):
+                            if st.session_state.expanded_store.get(person_name) == row['출고처']:
+                                st.session_state.expanded_store[person_name] = None
+                            else:
+                                st.session_state.expanded_store[person_name] = row['출고처']
+                            st.rerun()
+
+                        row_cols[1].write(row['출고처'])
+                        row_cols[2].write(row['재고수량'])
+                        row_cols[3].write(row['판매수량'])
+                        row_cols[4].write(row['재고회전율'])
+
+                        if st.session_state.expanded_store.get(person_name) == row['출고처']:
+                            with st.container():
+                                df_model = df_person[df_person['출고처'] == row['출고처']]
+                                model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
+                                model_detail = model_detail.sort_values(by='판매수량', ascending=False)
+                                model_total = model_detail['재고수량'] + model_detail['판매수량']
+                                model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
+                                
+                                # 모델별 상세표 크기 조정
+                                model_detail.rename(columns={'모델명': '모델', '재고수량': '재고', '판매수량': '판매', '재고회전율': '회전율'}, inplace=True)
+                                st.dataframe(model_detail, use_container_width=True, hide_index=True)
                         
-                        model_total = model_detail['재고수량'] + model_detail['판매수량']
-                        model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
-                        
-                        # --- <<< 표 헤더를 짧게 바꾸고 순번을 제거하여 표시 >>> ---
-                        model_detail.rename(columns={
-                            '모델명': '모델',
-                            '재고수량': '재고',
-                            '판매수량': '판매',
-                            '재고회전율': '회전율'
-                        }, inplace=True)
-                        st.dataframe(model_detail, use_container_width=True, hide_index=True)
+                        st.markdown("<hr style='margin-top: 5px; margin-bottom: 5px;'/>", unsafe_allow_html=True)
