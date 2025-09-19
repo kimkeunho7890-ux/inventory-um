@@ -19,7 +19,7 @@ st.markdown("""
         background-color: #FF7F0E; /* 주황색 배경 */
         border: 1px solid #FF7F0E;
         border-radius: 8px;        /* 모서리를 둥글게 */
-        padding: 5px 8px;          /* 내부 여백을 줄여 폭을 좁힘 */
+        padding: 2px 3px;          /* 내부 여백을 줄여 폭을 좁힘 */
         color: white;              /* 기본 글씨색 */
     }
     /* 메트릭 라벨(제목) 글씨색 */
@@ -170,3 +170,4 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                                 st.dataframe(model_detail, use_container_width=True, hide_index=True)
                         
                         st.markdown("<hr style='margin: 0.5rem 0;'/>", unsafe_allow_html=True)
+
