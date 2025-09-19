@@ -13,6 +13,11 @@ st.markdown("""
     .streamlit-expander .stDataFrame { font-size: 0.8rem; }
     .streamlit-expander .stDataFrame th, .streamlit-expander .stDataFrame td { padding: 4px 5px; }
     .stMarkdown { margin-bottom: -20px; }
+    /* 버튼을 작게 만듭니다 */
+    .stButton>button {
+        padding: 0.25em 0.38em;
+        font-size: 0.8rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -60,7 +65,6 @@ model_summary['재고회전율'] = np.divide(model_summary['판매수량'], tota
 top_20_summary = model_summary.head(20)
 st.dataframe(top_20_summary.T.astype(str), use_container_width=True)
 
-# --- "요약 모델 바로 조회" 버튼 섹션 제거 ---
 
 st.header('🔎 상세 검색')
 show_color = st.checkbox("색상별 상세 보기")
@@ -100,10 +104,13 @@ if selected_models:
 # --- <<< 계층형 상세 보기 로직 전체 수정 >>> ---
 st.header('📄 계층형 상세 데이터 보기')
 
+# 세션 상태 초기화 (어떤 판매점이 열려있는지 기억하기 위함)
+if 'expanded_store' not in st.session_state:
+    st.session_state.expanded_store = {}
+
 for group in [g for g in group_options if g in df_filtered['영업그룹'].unique()]:
     df_group = df_filtered[df_filtered['영업그룹'] == group]
-    group_stock = df_group['재고수량'].sum()
-    group_sales = df_group['판매수량'].sum()
+    group_stock = df_group['재고수량'].sum(); group_sales = df_group['판매수량'].sum()
     group_turnover = (group_sales / (group_stock + group_sales)) if (group_stock + group_sales) > 0 else 0
     
     with st.expander(f"🏢 **영업그룹: {group}** (재고: {group_stock}, 판매: {group_sales}, 회전율: {group_turnover:.2%})"):
@@ -121,24 +128,48 @@ for group in [g for g in group_options if g in df_filtered['영업그룹'].uniqu
                     df_store = df_person.groupby('출고처', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
                     df_store = df_store.sort_values(by='판매수량', ascending=False)
                     
-                    # 판매점 목록을 드롭다운으로 변경
-                    store_list = df_store['출고처'].tolist()
-                    store_list.insert(0, "판매점을 선택하세요")
-                    
-                    selected_store = st.selectbox(
-                        "판매점 상세 보기:",
-                        options=store_list,
-                        key=f"store_select_{group}_{person_name}" # 각 selectbox마다 고유 키 부여
-                    )
-                    
-                    # 판매점을 선택했을 경우에만 상세 내역 표시
-                    if selected_store != "판매점을 선택하세요":
-                        df_model = df_person[df_person['출고처'] == selected_store]
+                    store_total = df_store['재고수량'] + df_store['판매수량']
+                    df_store['재고회전율'] = (df_store['판매수량'] / store_total).apply(lambda x: f"{x:.2%}")
+
+                    # 판매점별 요약 리스트 헤더
+                    header_cols = st.columns((1, 3, 1.5, 1.5, 1.5))
+                    header_cols[0].markdown('**상세**')
+                    header_cols[1].markdown('**판매점명**')
+                    header_cols[2].markdown('**재고수량**')
+                    header_cols[3].markdown('**판매수량**')
+                    header_cols[4].markdown('**재고회전율**')
+
+                    # 판매점별 요약 리스트 및 상세보기 버튼 생성
+                    for idx, row in df_store.iterrows():
+                        unique_key = f"{group}_{person_name}_{row['출고처']}"
                         
-                        model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
-                        model_detail = model_detail.sort_values(by='판매수량', ascending=False)
+                        row_cols = st.columns((1, 3, 1.5, 1.5, 1.5))
+
+                        # '상세' 버튼 클릭 로직
+                        if row_cols[0].button("상세", key=f"btn_{unique_key}"):
+                            # 이미 열려있는 버튼을 다시 누르면 닫고, 다른 버튼을 누르면 새로 염
+                            if st.session_state.expanded_store.get(person_name) == row['출고처']:
+                                st.session_state.expanded_store[person_name] = None
+                            else:
+                                st.session_state.expanded_store[person_name] = row['출고처']
+                            st.rerun()
+
+                        row_cols[1].write(row['출고처'])
+                        row_cols[2].write(row['재고수량'])
+                        row_cols[3].write(row['판매수량'])
+                        row_cols[4].write(row['재고회전율'])
+
+                        # '상세' 버튼이 눌린 판매점의 상세 모델 현황 표시
+                        if st.session_state.expanded_store.get(person_name) == row['출고처']:
+                            with st.container():
+                                df_model = df_person[df_person['출고처'] == row['출고처']]
+                                
+                                model_detail = df_model.groupby('모델명', observed=True).agg(재고수량=('재고수량', 'sum'), 판매수량=('판매수량', 'sum')).reset_index()
+                                model_detail = model_detail.sort_values(by='판매수량', ascending=False)
+                                
+                                model_total = model_detail['재고수량'] + model_detail['판매수량']
+                                model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
+                                
+                                st.markdown(model_detail.to_html(index=False), unsafe_allow_html=True)
                         
-                        model_total = model_detail['재고수량'] + model_detail['판매수량']
-                        model_detail['재고회전율'] = (model_detail['판매수량'] / model_total).apply(lambda x: f"{x:.2%}")
-                        
-                        st.markdown(model_detail.to_html(index=False), unsafe_allow_html=True)
+                        st.markdown("<hr style='margin-top: 5px; margin-bottom: 5px;'/>", unsafe_allow_html=True)
